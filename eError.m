@@ -3,7 +3,10 @@ function [eErr, eIth, Ie] = eError(eVar, iVar, V, I, iIth, eBounds, const, probe
 %       with the measured current. Error is the sum of the absolute
 %       difference vector of the natural log of te current.
 %
-% Takes as input:
+% Output:           eErr: electron fit error   
+%                   eIth: theoretical electron current
+%                   Ie:   measured electron current
+% Input:
 %                   V: measured voltage array
 %                   I: measured current array
 %                   iVar: ion variables, n iVs
