@@ -33,9 +33,13 @@ Ie = I + iIth;                      % measured electron current corrected
                                    
 Ie = Ie.*(Ie > 0);                  % set all negative values zero
                                   
-diff = abs(log(Ie)-log(eIth));      % error of electron fit
+%diff = abs(log(Ie)-log(eIth));      % error of electron fit
 
-eErr = sum(diff(eBounds(1):eBounds(2))); % limit error to eBounds
+%eErr = sum(diff(eBounds(1):eBounds(2))); % limit error to eBounds
+
+reldiff = abs(log(eIth)-log(Ie))./abs(log(Ie));
+
+eErr = mean(reldiff(eBounds(1):eBounds(2)));
 
 end
 

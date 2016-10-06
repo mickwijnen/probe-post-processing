@@ -23,7 +23,7 @@ AN = 39.95;     %[amu] atomic mass number
 
 %-----------------------------File name----------------------------------%
 
-filename = 'KEITHLEY_20160930_153846_Z0X0Y0'; %filename WITHOUT extension
+filename = 'KEITHLEY_20161005_112613_Z0X0Y0'; %filename WITHOUT extension
 
 %% Pre-processing
 %-----------------------------Constants----------------------------------%
@@ -43,18 +43,27 @@ probe = struct('Rp', Rp, 'Lp', Lp, 'S', S, 'AR', AR);
 
 %-------------------------File management--------------------------------%
 
-file =  strcat(filename,'.txt');    % appends file extension to filename
+file =  fullfile('./raw data',strcat(filename,'.txt')); 
 
 date = datestr(now,'yyyymmdd');     % generates today's date string
 
-savedir = fullfile('./results',date,filename);  % specifies save directory
+savedir = fullfile('./results',date,'BRL',filename);  % specifies save directory
+
+mkdir(savedir);
 
 %----------------------------File Import---------------------------------%
 
 inputdata = importFile(file); % imports data file to table
 
 V    = inputdata.V;           % initialize voltage array
+
 Iraw = inputdata.Iraw;        % initialize raw current array
+
+SAT = find(V == 9999.999,1);  % remove saturated data points
+if ~isempty(SAT)
+    V = V(1:SAT-1);
+    Iraw = Iraw(1:SAT-1);
+end
 
 %-----------------------------Smoothing----------------------------------%
 
@@ -120,7 +129,11 @@ derivfig = figure('Name','derivative','NumberTitle','off');
 
 title('Estimation of T_e and V_s','Interpreter','tex')
 xlabel('Voltage [V]')
-set(hAx,'XLim',[0, 15])
+
+Vlow = get(gca, 'Xlim');
+set(hAx,'XLim',[-20, Vlow(2)])
+set(hAx(2),'Ylim',[0 8])
+set(hAx(2),'YTick',[0:8])
 
 ylabel(hAx(1),'$\frac{dI}{dV}$', ...
 'Interpreter','latex','Rotation',0,'FontSize',16)
@@ -141,13 +154,13 @@ Te = IdVdI(knnsearch(V,x(2)));  % set guess of Te
 %----------------------------Estimate of n-------------------------------%
 I = -I/1000;                          % rescale I to [A]
 
-idxU = knnsearch(V,V(1)+50);            % upper idx of fit range: Vmin+50V
+idxU = knnsearch(V,V(1)+50);          % upper idx of fit range: Vmin+50V
 
-C = polyfit(V(1:idxU),I(1:idxU),1);     % linear fit of ion fit range
+C = polyfit(V(1:idxU),I(1:idxU),1);   % linear fit of ion fit range
 
-Cs = sqrt(e*Te/mi);                     % Bohm velocity
+Cs = sqrt(e*Te/mi);                   % Bohm velocity
 
-n = (C(1)*Vf+C(2))/(-0.61*e*S*Cs); % estimate density with Bohm
+n = (C(1)*Vf+C(2))/(-0.61*e*S*Cs);    % estimate density with Bohm
 
 iVar = [n/1e17 iVs];
 eVar = [Te eVs];
@@ -176,7 +189,7 @@ eVbounds = [eVmin eVmax];
 
 % create plot handle
 Isquare = figure('Name','I squared','NumberTitle','off');
-annotation(Isquare,'textbox',[0.25 0.15 0.1 0.1],...
+annotation(Isquare,'textbox',[0.25 0.15 0.25 0.1],...
     'String','n = ','FitBoxToText','on')
 
 % generate theoretical ion curve with new iVar values
@@ -187,17 +200,17 @@ Isqrplot(Isquare, V, I, iVar, eVar, iVbounds, const, probe);
 
 % create plot handle
 TeFit = figure('Name','Electron Temperature','NumberTitle','off');
-annotation(TeFit,'textbox',[0.7 0.3 0.1 0.1],...
+annotation(TeFit,'textbox',[0.7 0.3 0.25 0.1],...
     'String','Te = ','FitBoxToText','on')
 %----------------------------Optimize Fits-------------------------------%
 
 % set plot options
 options = optimset('Display','none','PlotFcns',@optimplotx);
 
-for i = 1:2
+for i = 1:3
 % run optimizer with iError to minimize iErr
 [iVar, iErr] = fminsearch(@(iVar)...
-iError(iVar, eVar, V, I, iBounds, const, probe), [n/1e17 iVs], options)
+iError(iVar, eVar, V, I, iBounds, const, probe), [n/1e17 iVs], options);
 
 % generate theoretical ion curve with new iVar values
 [iIth, ~] = paraBRL(V, iVar, eVar, const, probe);
@@ -205,62 +218,93 @@ iError(iVar, eVar, V, I, iBounds, const, probe), [n/1e17 iVs], options)
 % plot the theoretical and measured squared ion currents
 [~] = Isqrplot(Isquare, V,I, iVar, eVar, iVbounds, const, probe);
 
-if i == 1
 [iBounds, iVbounds] = iSetfitbnd(V); % prompt user to define new fit bounds
-end
 
 % run optimizer with eError to minimize eErr
 [eVar, eErr] = fminsearch(@(eVar)...
-eError(eVar, iVar, V, I, iIth, eBounds, const, probe), [Te eVs], options)
+eError(eVar, iVar, V, I, iIth, eBounds, const, probe), [Te eVs], options);
 
 % Logplot of measured and theoretical electron currents
 TeFitplot(TeFit,V,I,iIth,iVar,eVar,eVbounds,eBounds,const,probe)
 
-if i == 1
 [eBounds, eVbounds] = eSetfitbnd(V); % prompt user to define new fit bounds
+
 end
-end
+
+Err = iErr + eErr;
+
 %----------------------------Final Optimization--------------------------%
 
-options = optimset('Display','iter','PlotFcns',@optimplotx);
+% options = optimset('Display','iter','PlotFcns',@optimplotx);
 
 Var = [iVar eVar];                          % combine all variables
 
 [Var, OPTErr] = fminsearch(@(Var)...           % run final optimization
-TError(Var, V, I, iBounds, eBounds, const, probe), Var, options)
+TError(Var, V, I, iBounds, eBounds, const, probe), Var, options);
+
+[OPTErr, OPTiErr, OPTeErr] = TError(Var, V, I, iBounds, eBounds, const, probe);
 
 OPTiVar = Var(1:2);            % set optimal ion variables
 OPTeVar = Var(3:4);            % set optimal electron variables 
 
-%-----------------------------Display Results----------------------------%
+n  = Var(1)*1e17;
+Te = Var(3);
+
+DL = 1000*sqrt(eps0*Te/e/n); % [mm] Debye length
+xi = Rp/DL;                  % Probe radius - Debye length ratio
+
+%-------------------------------Results----------------------------------%
 
 IsquareOPT = figure('Name','Optimized Density Fit','NumberTitle','off');
-annotation(Isquare,'textbox',[0.25 0.15 0.1 0.1],...
+annotation(IsquareOPT,'textbox',[0.25 0.15 0.25 0.1],...
     'String','n = ','FitBoxToText','on')  % create ion plot handle
 
-
 TeFitOPT = figure('Name','Optimized Electron Fit','NumberTitle','off');
-annotation(TeFit,'textbox',[0.7 0.3 0.1 0.1],...
+annotation(TeFitOPT,'textbox',[0.7 0.3 0.25 0.1],...
     'String','Te = ','FitBoxToText','on') % create electron plot handle
 
 [iIth] = Isqrplot(IsquareOPT,V,I,OPTiVar,OPTeVar,iVbounds,const,probe);
 
 TeFitplot(TeFitOPT,V,I,iIth,OPTiVar,OPTeVar,eVbounds,eBounds,const,probe);
 
-display(['Results for last consecutive optimization'])
-display(['Plasma density = ' num2str(iVar(1)*1e17,'%.2e') ' m^-3'])
-display(['Electron temperature = ' num2str(eVar(1),'%.2f') ' eV'])
-display(['Electron plasma potential = ' num2str(eVar(2),'%.2f') ' V'])
-display(['Ion plasma potential = ' num2str(iVar(2),'%.2f') ' V'])
-display(['Ion fit error = ' num2str(iErr,'%.2f')])
-display(['Electron fit error = ' num2str(eErr,'%.2f')])
-fprintf(1, '\n');
-display(['Results for last consecutive optimization'])
-display(['Plasma density = ' num2str(OPTiVar(1)*1e17,'%.2e') ' m^-3'])
-display(['Electron temperature = ' num2str(OPTeVar(1),'%.2f') ' eV'])
-display(['Electron plasma potential = ' num2str(OPTeVar(2),'%.2f') ' V'])
-display(['Ion plasma potential = ' num2str(OPTiVar(2),'%.2f') ' V'])
-display(['Total fit error = ' num2str(OPTErr,'%.2f')])
+% Create a text file to write results
+
+results = fullfile(savedir,strcat(filename,'_results','.txt'));
+
+fID = fopen(results,'w');
+
+fprintf(fID,['Results for last consecutive optimization \r\n']);
+fprintf(fID,['Plasma density = ' num2str(iVar(1)*1e17,'%.2e') ' m^-3 \r\n']);
+fprintf(fID,['Electron temperature = ' num2str(eVar(1),'%.2f') ' eV \r\n']);
+fprintf(fID,['Electron plasma potential = ' num2str(eVar(2),'%.2f') ' V \r\n']);
+fprintf(fID,['Ion plasma potential = ' num2str(iVar(2),'%.2f') ' V \r\n \r\n']);
+fprintf(fID,['Ion fit error = ' num2str(iErr*100,'%.2f') ' %% \r\n']);
+fprintf(fID,['Electron fit error = ' num2str(eErr*100,'%.2f') ' %% \r\n']);
+fprintf(fID,['Total fit error = ' num2str(Err*100,'%.2f') ' %% \r\n  \r\n']);
+
+fprintf(fID,['Results for last consecutive optimization \r\n \r\n']);
+fprintf(fID,['Plasma density = ' num2str(OPTiVar(1)*1e17,'%.2e') ' m^-3 \r\n']);
+fprintf(fID,['Electron temperature = ' num2str(OPTeVar(1),'%.2f') ' eV \r\n']);
+fprintf(fID,['Electron plasma potential = ' num2str(OPTeVar(2),'%.2f') ' V \r\n']);
+fprintf(fID,['Ion plasma potential = ' num2str(OPTiVar(2),'%.2f') ' V \r\n']);
+fprintf(fID,['Debye length = ' num2str(DL,'%.2f') ' mm \r\n']);
+fprintf(fID,['Probe/Debye length ratio  = ' num2str(xi,'%.2f') '\r\n \r\n']);
+fprintf(fID,['Ion fit error = ' num2str(OPTiErr*100,'%.2f') ' %% \r\n']);
+fprintf(fID,['Electron fit error = ' num2str(OPTeErr*100,'%.2f') ' %% \r\n']);
+fprintf(fID,['Total fit error = ' num2str(OPTErr*100,'%.2f') ' %% \r\n']);
+
+fclose(fID);
+
+nameFig = [Isquare, TeFit, IsquareOPT, TeFitOPT,];  % figure handles
+nameExt = {'_Isqr' '_Te' '_IsqrOPT' '_TeOPT'};   % figure name extensions
+
+for k = 1:length(nameFig)               % save all figures as FIG and PNG
+    saveas(nameFig(k),...
+        char(fullfile(savedir,strcat(filename,nameExt(k)))),'fig');
+    saveas(nameFig(k),...
+        char(fullfile(savedir,strcat(filename,nameExt(k)))),'png');
+end
+
 
 end
 
@@ -326,6 +370,8 @@ end
 
 function [iBounds, iVbounds] = iSetfitbnd(V)
 
+    persistent iVbnd iBnd;
+    
     display('Choose new ion fit boundaries.')
     [x,~] = ginput(2);
     
@@ -335,42 +381,57 @@ function [iBounds, iVbounds] = iSetfitbnd(V)
         iVmax = max(x);
         display(strcat({'New ion fit boundaries are '},...
         {num2str(iVmin)},{' and '}, {num2str(iVmax)},{' V'}))
+    
+        iLidx = knnsearch(V,iVmin); % index of ion fit lower limit
+        iUidx = knnsearch(V,iVmax); % index of ion fit upper limit
 
+        iBounds  = [iLidx iUidx];
+        iVbounds = [iVmin iVmax];
+        
+        iVbnd = iVbounds;
+        iBnd = iBounds;
+    
     else
         display('Ion fit boundaries unchanged')
+        
+        iVbounds = iVbnd;
+        iBounds = iBnd;
     end    
     
-    iLidx = knnsearch(V,iVmin); % index of ion fit lower limit
-    iUidx = knnsearch(V,iVmax); % index of ion fit upper limit
-
-    iBounds  = [iLidx iUidx];
-    iVbounds = [iVmin iVmax];
-    
+  
 end
 
 %% function to set electron fit boundaries
 function [eBounds, eVbounds] = eSetfitbnd(V)
-
+ 
     display('Choose new electron fit boundaries.')
     [x,~] = ginput(2);
 
+    persistent eVbnd eBnd;
+    
     if length(x) == 2;
     
         eVmin = min(x);
         eVmax = max(x);
         display(strcat({'New electron fit boundaries are '},...
         {num2str(eVmin)},{' and '}, {num2str(eVmax)},{' V'}))
+    
+        eLidx = knnsearch(V,eVmin); % index of electron fit upper limit
+        eUidx = knnsearch(V,eVmax); % index of electron fit upper limit
 
+        eBounds =  [eLidx eUidx];
+        eVbounds = [eVmin eVmax];
+        
+        eVbnd = eVbounds;
+        eBnd = eBounds;
     else
         display('Electron fit boundaries unchanged')
+        
+        eVbounds = eVbnd;
+        eBounds = eBnd;
     end
     
-    eLidx = knnsearch(V,eVmin); % index of electron fit upper limit
-    eUidx = knnsearch(V,eVmax); % index of electron fit upper limit
-
-    eBounds =  [eLidx eUidx];
-    eVbounds = [eVmin eVmax];
+    
     
 end
 
-%% function to generate boundary parameters from (i/e)Vmin (i/e)Vmax

@@ -18,9 +18,14 @@ function [iErr, iIth] = iError(iVar, eVar, V, I, iBounds, const, probe)
 [iIth, DL, xi]  = paraBRL(V, iVar, eVar, const, probe); % theoretical curve
 
 I = -I;                    % negate current data
- 
-diff = abs(I-iIth);        % calculate difference between data and theory
- 
-iErr = sum(diff(iBounds(1):iBounds(2))); % calculate error over interval 
+
+% diff = abs(iIth-I);        % calculate difference between data and theory
+
+% iErr = sum(diff(iBounds(1):iBounds(2))); % calculate error over interval 
+
+reldiff = abs(iIth-I)./abs(I);
+
+iErr = mean(reldiff(iBounds(1):iBounds(2)));
+
 end
 

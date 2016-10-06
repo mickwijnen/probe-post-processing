@@ -1,4 +1,4 @@
-function [Err] = TError(Var, V, I, iBounds, eBounds, const, probe)
+function [Err iErr eErr] = TError(Var, V, I, iBounds, eBounds, const, probe)
 % ERROR Generates the theoretical ion current and calculates the difference
 %       with the measured current in the ion region. It then substracts the 
 %       theoretical ion current from the measured current and compares this 
