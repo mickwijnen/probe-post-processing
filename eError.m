@@ -1,4 +1,5 @@
-function [eErr, eIth, Ie] = eError(eVar, iVar, V, I, iIth, eBounds, const, probe)
+function [eErr, eIth, Ie] = ...
+    eError(eVar, iVar, V, I, iIth, eBounds, const, probe)
 %eError Generates theoretical electron current and calculates the error
 %       with the measured current. Error is the sum of the absolute
 %       difference vector of the natural log of te current.
@@ -30,13 +31,9 @@ eIth = e*n*S*Ce*exp(-(eVs-V)/Te);    % theoretical electron current
     
 Ie = I + iIth;                      % measured electron current corrected
                                     % for theoretical ion current
-                                   
+
 Ie = Ie.*(Ie > 0);                  % set all negative values zero
                                   
-%diff = abs(log(Ie)-log(eIth));      % error of electron fit
-
-%eErr = sum(diff(eBounds(1):eBounds(2))); % limit error to eBounds
-
 reldiff = abs(log(eIth)-log(Ie))./abs(log(Ie));
 
 eErr = mean(reldiff(eBounds(1):eBounds(2)));

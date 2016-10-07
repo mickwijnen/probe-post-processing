@@ -15,7 +15,7 @@ close all
 %--------------------------Probe properties------------------------------%
 
 Rp =  0.127;  %[mm] probe radius 
-Lp =  5;        %[mm] probe length 
+Lp =  5;      %[mm] probe length 
 
 %---------------------------Gas properties-------------------------------%
 
@@ -23,7 +23,7 @@ AN = 39.95;     %[amu] atomic mass number
 
 %-----------------------------File name----------------------------------%
 
-filename = 'KEITHLEY_20161005_112613_Z0X0Y0'; %filename WITHOUT extension
+filename = 'KEITHLEY_20161005_111337_Z0X0Y0'; %filename WITHOUT extension
 
 %% Pre-processing
 %-----------------------------Constants----------------------------------%
@@ -49,7 +49,9 @@ date = datestr(now,'yyyymmdd');     % generates today's date string
 
 savedir = fullfile('./results',date,'BRL',filename);  % specifies save directory
 
-mkdir(savedir);
+if ~exist(savedir)
+    mkdir(savedir);
+end 
 
 %----------------------------File Import---------------------------------%
 
@@ -79,7 +81,7 @@ I = I/AR;                           % scale data with aspect ratio
 smoothfig = figure('Name','smoothed IV-curve','NumberTitle','off');
 
 subplot(2,1,1)
-plot(V, Iraw,'o',V,I,'-','MarkerSize',4)
+plot(V, Iraw,'o',V,I,'-','MarkerSize',3)
 
 ylabel('probe current [A]')
 
@@ -91,7 +93,7 @@ title('Comparison of raw and smoothed IV-curve')
 legend('raw data', 'smoothed data','Location','NorthWest')
 
 subplot(2,1,2)
-plot(V, sErr,'o', V, ones(length(V))*mean(sErr),'r-','MarkerSize',4)
+plot(V, sErr,'o', V, ones(length(V))*mean(sErr),'r-','MarkerSize',3)
 
 title('Smoothing error')
 legend('error', sprintf('mean=%4.2f %%',mean(sErr)),'Location','NorthWest')
@@ -104,13 +106,10 @@ ylim([0 10])
 
 idxV0 = find(V>=0,1);           % find the index of V = 0
         
-idxVf = find(I>0,1);            % find the index of the floating potential
+idxVf = find(I>0,1);            % find the index of the first I > 0
 
-if I(idxVf-1)<0                 % interpolate the floating potential
-    Vf = (V(idxVf)+ V(idxVf-1))/2;   
-else
-    Vf = (V(idxVf)+ V(idxVf+1))/2;
-end 
+                                % interpolate the floating potential
+Vf = V(idxVf-1) - I(idxVf-1)*(V(idxVf)-V(idxVf-1))/(I(idxVf)-I(idxVf-1))
 
 %-----------------------------Derivatives--------------------------------%
 
@@ -189,19 +188,16 @@ eVbounds = [eVmin eVmax];
 
 % create plot handle
 Isquare = figure('Name','I squared','NumberTitle','off');
-annotation(Isquare,'textbox',[0.25 0.15 0.25 0.1],...
-    'String','n = ','FitBoxToText','on')
 
 % generate theoretical ion curve with new iVar values
 [iIth, ~] = paraBRL(V, iVar, eVar, const, probe);
 
 % plot the theoretical and measured squared ion currents
-Isqrplot(Isquare, V, I, iVar, eVar, iVbounds, const, probe);
+Isqr(Isquare, V, I, iVar, eVar, iVbounds, const, probe);
 
 % create plot handle
-TeFit = figure('Name','Electron Temperature','NumberTitle','off');
-annotation(TeFit,'textbox',[0.7 0.3 0.25 0.1],...
-    'String','Te = ','FitBoxToText','on')
+LogTe = figure('Name','Electron Temperature','NumberTitle','off');
+
 %----------------------------Optimize Fits-------------------------------%
 
 % set plot options
@@ -216,7 +212,7 @@ iError(iVar, eVar, V, I, iBounds, const, probe), [n/1e17 iVs], options);
 [iIth, ~] = paraBRL(V, iVar, eVar, const, probe);
 
 % plot the theoretical and measured squared ion currents
-[~] = Isqrplot(Isquare, V,I, iVar, eVar, iVbounds, const, probe);
+Isqr(Isquare, V,I, iVar, eVar, iVbounds, const, probe);
 
 [iBounds, iVbounds] = iSetfitbnd(V); % prompt user to define new fit bounds
 
@@ -225,24 +221,33 @@ iError(iVar, eVar, V, I, iBounds, const, probe), [n/1e17 iVs], options);
 eError(eVar, iVar, V, I, iIth, eBounds, const, probe), [Te eVs], options);
 
 % Logplot of measured and theoretical electron currents
-TeFitplot(TeFit,V,I,iIth,iVar,eVar,eVbounds,eBounds,const,probe)
+[Ie eIth] = TeFit(LogTe,V,I,iIth,iVar,eVar,eVbounds,eBounds,const,probe);
 
 [eBounds, eVbounds] = eSetfitbnd(V); % prompt user to define new fit bounds
 
 end
 
-Err = iErr + eErr;
+Var = [iVar eVar]           % combine all variables
 
-%----------------------------Final Optimization--------------------------%
+Err = iErr + eErr;          % total fit error
 
-% options = optimset('Display','iter','PlotFcns',@optimplotx);
+dTe = TeUnCert(Var, V, eIth, Ie, eBounds); % calculate Te error
 
-Var = [iVar eVar];                          % combine all variables
+dn = nUnCert(Var, iErr, dTe, probe); % calculate density error
+
+annotation(Isquare,'textbox',[0.25 0.15 0.25 0.1],...
+  'String',['n = (' num2str(Var(1),'%.2f') char(177) num2str(dn,'%.2f')...
+  ')\cdot10^{17} m^{-3}'],'FitBoxToText','on')    % create annotation
+
+annotation(LogTe,'textbox',[0.65 0.3 0.25 0.1],...
+ 'String',['Te = ' num2str(Var(3),'%.2f') char(177) num2str(dTe,'%.2f')...
+ ' eV'],'FitBoxToText','on')                % create annotation
+%----------------------------Final Optimization--------------------------%                 
 
 [Var, OPTErr] = fminsearch(@(Var)...           % run final optimization
 TError(Var, V, I, iBounds, eBounds, const, probe), Var, options);
 
-[OPTErr, OPTiErr, OPTeErr] = TError(Var, V, I, iBounds, eBounds, const, probe);
+[OPTErr, OPTiErr, OPTeErr] = TError(Var,V,I,iBounds,eBounds,const,probe);
 
 OPTiVar = Var(1:2);            % set optimal ion variables
 OPTeVar = Var(3:4);            % set optimal electron variables 
@@ -256,16 +261,25 @@ xi = Rp/DL;                  % Probe radius - Debye length ratio
 %-------------------------------Results----------------------------------%
 
 IsquareOPT = figure('Name','Optimized Density Fit','NumberTitle','off');
+
+LogTeOPT = figure('Name','Optimized Electron Fit','NumberTitle','off');
+
+[iIth] = Isqr(IsquareOPT,V,I,OPTiVar,OPTeVar,iVbounds,const,probe);
+
+[Ie eIth] = TeFit(LogTeOPT,V,I,iIth,OPTiVar,...
+    OPTeVar,eVbounds,eBounds,const,probe);
+
+OPTdTe = TeUnCert(Var, V, eIth, Ie, eBounds); % calculate Te error
+
+OPTdn = nUnCert(Var, OPTiErr, OPTdTe, probe); % calculate density error
+
 annotation(IsquareOPT,'textbox',[0.25 0.15 0.25 0.1],...
-    'String','n = ','FitBoxToText','on')  % create ion plot handle
+'String',['n = (' num2str(Var(1),'%.2f') char(177) num2str(OPTdn,'%.2f')...
+')\cdot10^{17} m^{-3}'],'FitBoxToText','on')    % create annotation
 
-TeFitOPT = figure('Name','Optimized Electron Fit','NumberTitle','off');
-annotation(TeFitOPT,'textbox',[0.7 0.3 0.25 0.1],...
-    'String','Te = ','FitBoxToText','on') % create electron plot handle
-
-[iIth] = Isqrplot(IsquareOPT,V,I,OPTiVar,OPTeVar,iVbounds,const,probe);
-
-TeFitplot(TeFitOPT,V,I,iIth,OPTiVar,OPTeVar,eVbounds,eBounds,const,probe);
+annotation(LogTeOPT,'textbox',[0.65 0.3 0.25 0.1],...
+ 'String',['Te = ' num2str(Var(3),'%.2f') char(177) num2str(OPTdTe,'%.2f')...
+ ' eV'],'FitBoxToText','on')                % create annotation
 
 % Create a text file to write results
 
@@ -274,29 +288,36 @@ results = fullfile(savedir,strcat(filename,'_results','.txt'));
 fID = fopen(results,'w');
 
 fprintf(fID,['Results for last consecutive optimization \r\n']);
-fprintf(fID,['Plasma density = ' num2str(iVar(1)*1e17,'%.2e') ' m^-3 \r\n']);
-fprintf(fID,['Electron temperature = ' num2str(eVar(1),'%.2f') ' eV \r\n']);
+fprintf(fID,['Plasma density = ' num2str(iVar(1), '%.2f') char(177)...
+    num2str(dn,'%.2f') 'e+17 m^-3 \r\n']);
+fprintf(fID,['Electron temperature = ' num2str(eVar(1),'%.2f') char(177)...
+    num2str(dTe,'%.2f') ' eV \r\n']);
 fprintf(fID,['Electron plasma potential = ' num2str(eVar(2),'%.2f') ' V \r\n']);
 fprintf(fID,['Ion plasma potential = ' num2str(iVar(2),'%.2f') ' V \r\n \r\n']);
+
 fprintf(fID,['Ion fit error = ' num2str(iErr*100,'%.2f') ' %% \r\n']);
 fprintf(fID,['Electron fit error = ' num2str(eErr*100,'%.2f') ' %% \r\n']);
 fprintf(fID,['Total fit error = ' num2str(Err*100,'%.2f') ' %% \r\n  \r\n']);
 
 fprintf(fID,['Results for last consecutive optimization \r\n \r\n']);
-fprintf(fID,['Plasma density = ' num2str(OPTiVar(1)*1e17,'%.2e') ' m^-3 \r\n']);
-fprintf(fID,['Electron temperature = ' num2str(OPTeVar(1),'%.2f') ' eV \r\n']);
+fprintf(fID,['Plasma density = ' num2str(OPTiVar(1),'%.2f')...
+    char(177) num2str(OPTdn,'%.2f') 'e+17 m^-3 \r\n']);
+fprintf(fID,['Electron temperature = ' num2str(OPTeVar(1),'%.2f')... 
+    char(177) num2str(OPTdTe,'%.2f') ' eV \r\n']);
 fprintf(fID,['Electron plasma potential = ' num2str(OPTeVar(2),'%.2f') ' V \r\n']);
 fprintf(fID,['Ion plasma potential = ' num2str(OPTiVar(2),'%.2f') ' V \r\n']);
+fprintf(fID,['Floating potential = ' num2str(Vf,'%.2f') ' V \r\n']);
 fprintf(fID,['Debye length = ' num2str(DL,'%.2f') ' mm \r\n']);
-fprintf(fID,['Probe/Debye length ratio  = ' num2str(xi,'%.2f') '\r\n \r\n']);
+fprintf(fID,['Probe parameter = ' num2str(xi,'%.2f') '\r\n \r\n']);
+
 fprintf(fID,['Ion fit error = ' num2str(OPTiErr*100,'%.2f') ' %% \r\n']);
 fprintf(fID,['Electron fit error = ' num2str(OPTeErr*100,'%.2f') ' %% \r\n']);
 fprintf(fID,['Total fit error = ' num2str(OPTErr*100,'%.2f') ' %% \r\n']);
 
 fclose(fID);
 
-nameFig = [Isquare, TeFit, IsquareOPT, TeFitOPT,];  % figure handles
-nameExt = {'_Isqr' '_Te' '_IsqrOPT' '_TeOPT'};   % figure name extensions
+nameFig = [Isquare, LogTe, IsquareOPT, LogTeOPT,];  % figure handles
+nameExt = {'_Isqr' '_LogTe' '_IsqrOPT' '_LogTeOPT'};   % figure name extensions
 
 for k = 1:length(nameFig)               % save all figures as FIG and PNG
     saveas(nameFig(k),...
@@ -310,7 +331,7 @@ end
 
 %% Function for plotting squared currents
 
-function [iIth] = Isqrplot(Isquare,V,I,iVar,eVar,iVbounds,const,probe)
+function [iIth] = Isqr(Isquare,V,I,iVar,eVar,iVbounds,const,probe)
 
 [iIth, ~] = paraBRL(V, iVar, eVar, const, probe);
 
@@ -318,17 +339,13 @@ Isqr = (I.*(I < 0)).^2;                    % square of current where I < 0
 
 figure(Isquare)
 
-plot(V,Isqr,'o',V,iIth.^2,'MarkerSize',4)   % plot data vs theory, squared
+plot(V,Isqr,'o',V,iIth.^2,'MarkerSize',3)   % plot data vs theory, squared
 vline(iVbounds,'k:')                        % plot fit boundaries
-
-n = iVar(1);                                 % get electron temperature
-A = get(findall(gcf,'Tag','scribeOverlay'),'Children'); %annotation handle
-A.String = ['n = ' num2str(n*1e17,'%.2e')];   % set annotation string to Te 
 
 title('Theoretical vs. measured square of ion current')
 xlabel('Voltage [V]')
 ylabel('Current squared [A^2]','Interpreter','tex')
-legend('Measured current','Theoretical current')
+legend('easured current','theoretical current')
 
 
 
@@ -336,9 +353,10 @@ end
 
 %% Function for plotting electron fit
 
-function [] = TeFitplot(TeFit,V,I,iIth,iVar,eVar,eVbounds,eBounds,const,probe)
+function [Ie, eIth] = TeFit(LogTe,V,I,iIth,iVar,eVar,...
+          eVbounds,eBounds,const,probe)
 
-figure(TeFit)
+figure(LogTe)
 
 [eErr, eIth, Ie] = eError(eVar, iVar, V, I, iIth, eBounds, const, probe);
 
@@ -347,16 +365,12 @@ if isempty(Vlow)                              % if Ie > 0 everywhere find
    Vlow = V(min(Ie))                          % find V where Ie = min(Ie)
 end
 
-semilogy(V,Ie,'o',V,I,V,eIth,'MarkerSize',4); % logplot of electron current
+semilogy(V,Ie,'o',V,I,V,eIth,'MarkerSize',3); % logplot of electron current
 
 limV = get(gca, 'XLim');                      % get current x limit
 set(gca, 'Xlim',[Vlow limV(2)]);              % set lower x limit
 
 vline(eVbounds,'k:')                          % plot fit boundaries
-
-Te = eVar(1);                                 % get electron temperature
-A = get(findall(gcf,'Tag','scribeOverlay'),'Children'); %annotation handle
-A.String = ['Te = ' num2str(Te,'%.2f')];   % set annotation string to Te 
 
 title('Natural log of theoretical vs. measured electron current')
 xlabel('Voltage [V]')
@@ -430,8 +444,7 @@ function [eBounds, eVbounds] = eSetfitbnd(V)
         eVbounds = eVbnd;
         eBounds = eBnd;
     end
-    
-    
-    
+          
 end
+%% function to calculate the electron temperature and plasma density errors
 
