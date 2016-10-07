@@ -288,8 +288,8 @@ results = fullfile(savedir,strcat(filename,'_results','.txt'));
 fID = fopen(results,'w');
 
 fprintf(fID,['Results for last consecutive optimization \r\n']);
-fprintf(fID,['Plasma density = ' num2str(iVar(1), '%.2f') char(177)...
-    num2str(dn,'%.2f') 'e+17 m^-3 \r\n']);
+fprintf(fID,['Plasma density = (' num2str(iVar(1), '%.2f') char(177)...
+    num2str(dn,'%.2f') ')e+17 m^-3 \r\n']);
 fprintf(fID,['Electron temperature = ' num2str(eVar(1),'%.2f') char(177)...
     num2str(dTe,'%.2f') ' eV \r\n']);
 fprintf(fID,['Electron plasma potential = ' num2str(eVar(2),'%.2f') ' V \r\n']);
@@ -300,8 +300,8 @@ fprintf(fID,['Electron fit error = ' num2str(eErr*100,'%.2f') ' %% \r\n']);
 fprintf(fID,['Total fit error = ' num2str(Err*100,'%.2f') ' %% \r\n  \r\n']);
 
 fprintf(fID,['Results for last consecutive optimization \r\n \r\n']);
-fprintf(fID,['Plasma density = ' num2str(OPTiVar(1),'%.2f')...
-    char(177) num2str(OPTdn,'%.2f') 'e+17 m^-3 \r\n']);
+fprintf(fID,['Plasma density = (' num2str(OPTiVar(1),'%.2f')...
+    char(177) num2str(OPTdn,'%.2f') ')e+17 m^-3 \r\n']);
 fprintf(fID,['Electron temperature = ' num2str(OPTeVar(1),'%.2f')... 
     char(177) num2str(OPTdTe,'%.2f') ' eV \r\n']);
 fprintf(fID,['Electron plasma potential = ' num2str(OPTeVar(2),'%.2f') ' V \r\n']);
