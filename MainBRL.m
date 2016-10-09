@@ -23,7 +23,7 @@ AN = 39.95;     %[amu] atomic mass number
 
 %-----------------------------File name----------------------------------%
 
-filename = 'KEITHLEY_20161005_111337_Z0X0Y0'; %filename WITHOUT extension
+filename = 'KEITHLEY_20161005_113323_Z0X0Y0'; %filename WITHOUT extension
 
 %% Pre-processing
 %-----------------------------Constants----------------------------------%
@@ -52,6 +52,8 @@ savedir = fullfile('./results',date,'BRL',filename);  % specifies save directory
 if ~exist(savedir)
     mkdir(savedir);
 end 
+
+warning('off','MATLAB:Axes:NegativeDataInLogAxis') % ignore logplot warning
 
 %----------------------------File Import---------------------------------%
 
@@ -345,7 +347,7 @@ vline(iVbounds,'k:')                        % plot fit boundaries
 title('Theoretical vs. measured square of ion current')
 xlabel('Voltage [V]')
 ylabel('Current squared [A^2]','Interpreter','tex')
-legend('easured current','theoretical current')
+legend('measured current','theoretical current')
 
 
 

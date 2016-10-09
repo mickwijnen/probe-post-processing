@@ -23,7 +23,7 @@ AN = 39.95;     %[amu] atomic mass number
 
 %-----------------------------File name----------------------------------%
 
-filename = 'KEITHLEY_20161005_112613_Z0X0Y0'; %filename WITHOUT extension
+filename = 'KEITHLEY_20161005_113323_Z0X0Y0'; %filename WITHOUT extension
 
 %% Pre-processing
 %-----------------------------Constants----------------------------------%
